@@ -1,5 +1,9 @@
 # Gensim
+import heapq
+import os.path
+
 import gensim
+from gensim.test.utils import datapath
 import gensim.corpora as corpora
 from gensim.utils import simple_preprocess
 from gensim.models import CoherenceModel
@@ -24,7 +28,51 @@ import warnings
 from numpy import exp
 
 
-# pyLDAvis.enable_notebook()
+def relevance_to_color(relevance):
+    """
+    根据相关度返回HTML颜色代码（从绿色到红色渐变）
+
+    参数:
+    - relevance: 浮点数，表示相关度，范围在0到1之间
+
+    返回:
+    - 字符串，表示HTML颜色代码
+    """
+    # 映射相关度到颜色渐变
+    # 当relevance为0时，使用绿色（#00FF00），当为1时，使用红色（#FF0000）
+    # 这里我们使用线性插值来得到中间的颜色
+    red = int(255 * relevance)
+    green = 255 - red
+    blue = 0  # 保持蓝色为0，以实现绿到红的渐变
+
+    return f'color: rgb({red}, {green}, {blue});'
+
+
+def get_topic_map(lda_model, corpus, list_size):
+    doc_topics = lda_model.get_document_topics(corpus, minimum_probability=0)
+    map = {}
+
+    class wrapper:
+        def __init__(self, doc_id, score):
+            self.doc_id = doc_id
+            self.score = score
+
+        def __lt__(self, other):
+            return self.score < other.score
+
+        def __str__(self):
+            return '{' + str(self.doc_id) + ':' + str(self.score) + '}'
+
+    for topic_id in range(lda_model.num_topics):
+        doc_list = []
+        for doc_id, doc_dist in enumerate(doc_topics):
+            score = doc_dist[topic_id]
+            heapq.heappush(doc_list, wrapper(doc_id, score))
+            if len(doc_list) >= list_size:
+                heapq.heappop(doc_list)
+        map[topic_id] = doc_list
+
+    return map
 
 
 def load_data(file_path, keep_url=False):
@@ -57,10 +105,12 @@ def make_bigrams(data_words, bigram_mod):
     return [bigram_mod[doc] for doc in data_words]
 
 
+# TODO 是否存在三元词组
 def make_trigrams(texts, bigram_mod, trigram_mod):
     return [trigram_mod[bigram_mod[doc]] for doc in texts]
 
 
+# TODO 词形还原后是否删去某些词
 def lemmatization(texts, nlp, allowed_postags=['NOUN', 'ADJ', 'VERB', 'ADV']):
     """https://spacy.io/api/annotation"""
     texts_out = []
@@ -81,8 +131,10 @@ def text2bow(texts, dictionary):
 # 返回值：文本向量、词典、词形还原后的语料
 def pre_data(data, language):
     data_words = sent_to_words(data)
+    # TODO 阈值设置
     bigram = gensim.models.Phrases(data_words, min_count=5, threshold=100)
     trigram = gensim.models.Phrases(bigram[data_words], threshold=100)
+    # TODO 和bigram的区别
     bigram_mod = gensim.models.phrases.Phraser(bigram)
     if language == 'en':
         stop_words = stopwords.words('english')
@@ -100,23 +152,20 @@ def pre_data(data, language):
     # corpus = [id2word.doc2bow(text) for text in texts]
 
 
-def LDA(corpus, id2word, data_lemmatized, num_topics):
-    lda_model = gensim.models.ldamodel.LdaModel(corpus=corpus,
-                                                id2word=id2word,
-                                                num_topics=num_topics,
-                                                random_state=100,
-                                                update_every=1,
-                                                chunksize=100,
-                                                passes=10,
-                                                alpha='auto',
-                                                per_word_topics=True)
+def LDA(corpus, id2word, data_lemmatized, num_topics, save_model=True, model_file='model'):
+    model_file = datapath(model_file)
+    if os.path.exists(model_file):
+        lda_model = gensim.models.ldamodel.LdaModel.load(model_file)
+    else:
+        lda_model = gensim.models.ldamodel.LdaModel(corpus=corpus,
+                                                    id2word=id2word,
+                                                    num_topics=num_topics,
+                                                    random_state=100,
+                                                    update_every=1,
+                                                    chunksize=100,
+                                                    passes=10,
+                                                    alpha='auto',
+                                                    per_word_topics=True)
 
     # pprint(lda_model.print_topics())
-
-    perplexity = pow(2, -lda_model.log_perplexity(corpus))
-    print('\nPerplexity: ', perplexity)
-    coherence_model_lda = CoherenceModel(model=lda_model, texts=data_lemmatized, dictionary=id2word, coherence='c_v')
-    coherence_lda = coherence_model_lda.get_coherence()
-    print('\nCoherence Score: ', coherence_lda)
-    vis = pyLDAvis.gensim.prepare(lda_model, corpus, id2word)
-    return vis, perplexity, coherence_lda
+    return lda_model
