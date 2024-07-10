@@ -66,7 +66,7 @@ def train(num_topics, use_en=False, save_model=True, model_file='model'):
     if save_model:
         lda_model.save(model_file)
 
-    print(LDA.get_topic_map(lda_model, corpus, 10))
+
 
     def text2HTML(text, special_words):
         html_text = ''
@@ -100,5 +100,5 @@ def train(num_topics, use_en=False, save_model=True, model_file='model'):
 
 
 if __name__ == '__main__':
-    vis, plx, coherence = train(10, True)
+    vis, plx, coherence = train(10)
     show_and_save_vis(vis, filename='output.html')
