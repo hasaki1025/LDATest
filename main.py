@@ -1,20 +1,17 @@
 # 德语单独训练
 import os.path
-import html
 
 import gensim.models
-from gensim.models import CoherenceModel
-from matplotlib import pyplot as plt
-
 import pyLDAvis
-
-# 这是一个示例 Python 脚本。
-
-# 按 Shift+F10 执行或将其替换为您的代码。
-# 按 双击 Shift 在所有地方搜索类、文件、工具窗口、操作和设置。
+from gensim.models import CoherenceModel
 
 import LDA
 import LanguageDetect as ld
+
+
+# 这是一个示例 Python 脚本。
+# 按 Shift+F10 执行或将其替换为您的代码。
+# 按 双击 Shift 在所有地方搜索类、文件、工具窗口、操作和设置。
 
 
 def show_and_save_vis(vis, filename='output.html'):
@@ -39,6 +36,36 @@ def write_out_as_html(text, filename):
         file.write(text_last)
 
 
+def generate_word_html(lda_model, map, dictionary, data):
+    def text2HTML(text, special_words):
+        html_text = ''
+        words = text.split()
+        i = 0
+        while i < len(words):
+            word = words[i]
+            if word in special_words:
+                # 获取颜色并添加HTML标签
+                color = LDA.relevance_to_color(special_words[word])
+                html_text += f'<span style="{color}">{word}</span>'
+            else:
+                html_text += word
+            if i < len(words) - 1:
+                html_text += ' '
+            i += 1
+        return html_text
+
+    for topic_id, topic_docs in map.items():
+        topic_html_text = ''
+        sp_words = {dictionary[word_id]: prob for word_id, prob in lda_model.get_topic_terms(topic_id)}
+        print(sp_words)
+        for doc_wrapper in topic_docs:
+            text = data[doc_wrapper.doc_id]
+            text = '<p>' + text2HTML(text, sp_words) + '</p>'
+            topic_html_text = topic_html_text + text
+
+        write_out_as_html(topic_html_text, f'topic{topic_id}Doc.html')
+
+
 def train(num_topics, use_en=False, save_model=True, model_file='model'):
     file = 'data/LDAData.xlsx'
     data = LDA.load_data(file)
@@ -61,44 +88,18 @@ def train(num_topics, use_en=False, save_model=True, model_file='model'):
     coherence_lda = coherence_model_lda.get_coherence()
 
     print('\nCoherence Score: ', coherence_lda)
-    vis = pyLDAvis.gensim.prepare(lda_model, corpus, dictionary)
 
     if save_model:
         lda_model.save(model_file)
 
-
-
-    def text2HTML(text, special_words):
-        html_text = ''
-        words = text.split()
-        i = 0
-        while i < len(words):
-            word = words[i]
-            if word in special_words:
-                # 获取颜色并添加HTML标签
-                color = LDA.relevance_to_color(special_words[word])
-                html_text += f'<span style="{color}">{word}</span>'
-            else:
-                html_text += word
-            if i < len(words) - 1:
-                html_text += ' '
-            i += 1
-        return html_text
-
-    map = LDA.get_topic_map(lda_model, corpus, 10)
-    for topic_id, topic_docs in map.items():
-        topic_html_text = ''
-        sp_words = {dictionary[word_id]: prob for word_id, prob in lda_model.get_topic_terms(topic_id)}
-        print(sp_words)
-        for doc_wrapper in topic_docs:
-            text = data[doc_wrapper.doc_id]
-            text = '<p>' + text2HTML(text, sp_words) + '</p>'
-            topic_html_text = topic_html_text + text
-
-        write_out_as_html(topic_html_text, f'topic{topic_id}Doc.html')
-    return vis, perplexity, coherence_lda
+    return lda_model, corpus, dictionary
 
 
 if __name__ == '__main__':
-    vis, plx, coherence = train(10)
+    lda_model, corpus, dictionary = train(10)
+    vis = pyLDAvis.gensim.prepare(lda_model, corpus, dictionary)
     show_and_save_vis(vis, filename='output.html')
+    map = LDA.get_topic_map(lda_model, corpus, 10)
+    file = 'data/LDAData.xlsx'
+    data = LDA.load_data(file)
+    generate_word_html(lda_model, map, dictionary, data)

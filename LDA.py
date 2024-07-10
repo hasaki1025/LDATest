@@ -25,7 +25,17 @@ import logging
 from nltk.corpus import stopwords
 import warnings
 
+from collections import Counter
 from numpy import exp
+
+
+def get_doc_by_id(data_lemmatized, doc_id):
+    return ' '.join(data_lemmatized[doc_id])
+
+
+def get_topic_doc(doc_list, data_lemmatized):
+    docs = [get_doc_by_id(data_lemmatized, i.doc_id) for i in doc_list]
+    return ' '.join(docs)
 
 
 def relevance_to_color(relevance):
@@ -122,6 +132,11 @@ def lemmatization(texts, nlp, allowed_postags=['NOUN', 'ADJ', 'VERB', 'ADV']):
 
 def create_dictionary(texts):
     return corpora.Dictionary(texts)
+
+
+def get_word_freq(texts, words=10):
+    flat_texts = [word for doc in texts for word in doc]
+    return Counter(flat_texts).most_common(words)
 
 
 def text2bow(texts, dictionary):
